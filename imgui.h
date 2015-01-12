@@ -254,7 +254,7 @@ namespace ImGui
     IMGUI_API bool          RadioButton(const char* label, bool active);
     IMGUI_API bool          RadioButton(const char* label, int* v, int v_button);
     IMGUI_API bool          InputText(const char* label, char* buf, size_t buf_size, ImGuiInputTextFlags flags = 0, void (*callback)(ImGuiTextEditCallbackData*) = NULL, void* user_data = NULL);
-    IMGUI_API bool          InputMultilineText(const char* label, char* buf, size_t buf_size, ImGuiInputTextFlags flags = 0, void (*callback)(ImGuiTextEditCallbackData*) = NULL, void* user_data = NULL);
+    IMGUI_API bool          InputMultilineText(const char* label, int numRows, char* buf, size_t buf_size, ImGuiInputTextFlags flags = 0, void (*callback)(ImGuiTextEditCallbackData*) = NULL, void* user_data = NULL);
     IMGUI_API bool          InputFloat(const char* label, float* v, float step = 0.0f, float step_fast = 0.0f, int decimal_precision = -1, ImGuiInputTextFlags extra_flags = 0);
     IMGUI_API bool          InputFloat2(const char* label, float v[2], int decimal_precision = -1);
     IMGUI_API bool          InputFloat3(const char* label, float v[3], int decimal_precision = -1);

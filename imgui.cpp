@@ -5044,7 +5044,7 @@ bool ImGui::InputText(const char* label, char* buf, size_t buf_size, ImGuiInputT
         return value_changed;
 }
 
-bool ImGui::InputMultilineText(const char* label, char* buf, size_t buf_size, ImGuiInputTextFlags flags, void(*callback)(ImGuiTextEditCallbackData*), void* user_data)
+bool ImGui::InputMultilineText(const char* label, int numRows, char* buf, size_t buf_size, ImGuiInputTextFlags flags, void(*callback)(ImGuiTextEditCallbackData*), void* user_data)
 {
 	ImGuiState& g = GImGui;
 	ImGuiWindow* window = GetCurrentWindow();
@@ -5058,7 +5058,7 @@ bool ImGui::InputMultilineText(const char* label, char* buf, size_t buf_size, Im
 	const float w = window->DC.ItemWidth.back();
 
 	const ImVec2 text_size = CalcTextSize(label, NULL, true);
-	const ImGuiAabb frame_bb(window->DC.CursorPos, window->DC.CursorPos + ImVec2(w, text_size.y) + style.FramePadding*2.0f);
+	const ImGuiAabb frame_bb(window->DC.CursorPos, window->DC.CursorPos + ImVec2(w, text_size.y * numRows) + style.FramePadding*2.0f);
 	const ImGuiAabb bb(frame_bb.Min, frame_bb.Max + ImVec2(text_size.x > 0.0f ? (style.ItemInnerSpacing.x + text_size.x) : 0.0f, 0.0f));
 	ItemSize(bb);
 
@@ -5148,7 +5148,7 @@ bool ImGui::InputMultilineText(const char* label, char* buf, size_t buf_size, Im
 		else if (IsKeyPressedMap(ImGuiKey_End))                 { edit_state.OnKeyPressed(is_ctrl_down ? STB_TEXTEDIT_K_TEXTEND | k_mask : STB_TEXTEDIT_K_LINEEND | k_mask); }
 		else if (IsKeyPressedMap(ImGuiKey_Delete))              { edit_state.OnKeyPressed(STB_TEXTEDIT_K_DELETE | k_mask); }
 		else if (IsKeyPressedMap(ImGuiKey_Backspace))           { edit_state.OnKeyPressed(STB_TEXTEDIT_K_BACKSPACE | k_mask); }
-		else if (IsKeyPressedMap(ImGuiKey_Enter))               { g.ActiveId = 0; enter_pressed = true; }
+		//else if (IsKeyPressedMap(ImGuiKey_Enter))               { g.ActiveId = 0; enter_pressed = true; }
 		else if (IsKeyPressedMap(ImGuiKey_Escape))              { g.ActiveId = 0; cancel_edit = true; }
 		else if (is_ctrl_down && IsKeyPressedMap(ImGuiKey_Z))   { edit_state.OnKeyPressed(STB_TEXTEDIT_K_UNDO); }
 		else if (is_ctrl_down && IsKeyPressedMap(ImGuiKey_Y))   { edit_state.OnKeyPressed(STB_TEXTEDIT_K_REDO); }
