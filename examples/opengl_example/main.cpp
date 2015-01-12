@@ -263,8 +263,10 @@ int main(int argc, char** argv)
         UpdateImGui();
 
 		auto showWindow = true;
+		const int bufferSize = 1024;
+		char buffer[bufferSize];
 		ImGui::Begin("Another Window", &showWindow, ImVec2(200, 100));
-		ImGui::Text("Hello");
+		ImGui::InputText("", buffer, bufferSize);
 		ImGui::End();
 
         // Rendering
