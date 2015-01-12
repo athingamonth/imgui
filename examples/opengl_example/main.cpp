@@ -262,44 +262,10 @@ int main(int argc, char** argv)
         glfwPollEvents();
         UpdateImGui();
 
-        static bool show_test_window = true;
-        static bool show_another_window = false;
-
-        // 1. Show a simple window
-        // Tip: if we don't call ImGui::Begin()/ImGui::End() the widgets appears in a window automatically called "Debug"
-        {
-            static float f;
-            ImGui::Text("Hello, world!");
-            ImGui::SliderFloat("float", &f, 0.0f, 1.0f);
-            show_test_window ^= ImGui::Button("Test Window");
-            show_another_window ^= ImGui::Button("Another Window");
-
-            // Calculate and show frame rate
-            static float ms_per_frame[120] = { 0 };
-            static int ms_per_frame_idx = 0;
-            static float ms_per_frame_accum = 0.0f;
-            ms_per_frame_accum -= ms_per_frame[ms_per_frame_idx];
-            ms_per_frame[ms_per_frame_idx] = ImGui::GetIO().DeltaTime * 1000.0f;
-            ms_per_frame_accum += ms_per_frame[ms_per_frame_idx];
-            ms_per_frame_idx = (ms_per_frame_idx + 1) % 120;
-            const float ms_per_frame_avg = ms_per_frame_accum / 120;
-            ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", ms_per_frame_avg, 1000.0f / ms_per_frame_avg);
-        }
-
-        // 2. Show another simple window, this time using an explicit Begin/End pair
-        if (show_another_window)
-        {
-            ImGui::Begin("Another Window", &show_another_window, ImVec2(200,100));
-            ImGui::Text("Hello");
-            ImGui::End();
-        }
-
-        // 3. Show the ImGui test window. Most of the sample code is in ImGui::ShowTestWindow()
-        if (show_test_window)
-        {
-            ImGui::SetNextWindowPos(ImVec2(650, 20), ImGuiSetCondition_FirstUseEver);
-            ImGui::ShowTestWindow(&show_test_window);
-        }
+		auto showWindow = true;
+		ImGui::Begin("Another Window", &showWindow, ImVec2(200, 100));
+		ImGui::Text("Hello");
+		ImGui::End();
 
         // Rendering
         glViewport(0, 0, (int)io.DisplaySize.x, (int)io.DisplaySize.y);
