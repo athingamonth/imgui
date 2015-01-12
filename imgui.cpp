@@ -5067,6 +5067,7 @@ bool ImGui::InputMultilineText(const char* label, int numRows, char* buf, size_t
 
 	// NB: we are only allowed to access 'edit_state' if we are the active widget.
 	ImGuiTextEditState& edit_state = g.InputTextState;
+	edit_state.StbState.single_line = 0;
 
 	const bool is_ctrl_down = io.KeyCtrl;
 	const bool is_shift_down = io.KeyShift;
@@ -5148,7 +5149,6 @@ bool ImGui::InputMultilineText(const char* label, int numRows, char* buf, size_t
 		else if (IsKeyPressedMap(ImGuiKey_End))                 { edit_state.OnKeyPressed(is_ctrl_down ? STB_TEXTEDIT_K_TEXTEND | k_mask : STB_TEXTEDIT_K_LINEEND | k_mask); }
 		else if (IsKeyPressedMap(ImGuiKey_Delete))              { edit_state.OnKeyPressed(STB_TEXTEDIT_K_DELETE | k_mask); }
 		else if (IsKeyPressedMap(ImGuiKey_Backspace))           { edit_state.OnKeyPressed(STB_TEXTEDIT_K_BACKSPACE | k_mask); }
-		//else if (IsKeyPressedMap(ImGuiKey_Enter))               { g.ActiveId = 0; enter_pressed = true; }
 		else if (IsKeyPressedMap(ImGuiKey_Escape))              { g.ActiveId = 0; cancel_edit = true; }
 		else if (is_ctrl_down && IsKeyPressedMap(ImGuiKey_Z))   { edit_state.OnKeyPressed(STB_TEXTEDIT_K_UNDO); }
 		else if (is_ctrl_down && IsKeyPressedMap(ImGuiKey_Y))   { edit_state.OnKeyPressed(STB_TEXTEDIT_K_REDO); }
@@ -5201,6 +5201,10 @@ bool ImGui::InputMultilineText(const char* label, int numRows, char* buf, size_t
 					ImGui::MemFree(clipboard_filtered);
 				}
 			}
+		}
+		else if (IsKeyPressedMap(ImGuiKey_Enter))
+		{
+			edit_state.OnKeyPressed(STB_TEXTEDIT_NEWLINE);
 		}
 		else if (g.IO.InputCharacters[0])
 		{
@@ -5330,6 +5334,8 @@ bool ImGui::InputMultilineText(const char* label, int numRows, char* buf, size_t
 	}
 
 	RenderText(ImVec2(frame_bb.Max.x + style.ItemInnerSpacing.x, frame_bb.Min.y + style.FramePadding.y), label);
+
+	edit_state.StbState.single_line = 1;
 
 	if ((flags & ImGuiInputTextFlags_EnterReturnsTrue) != 0)
 		return enter_pressed;

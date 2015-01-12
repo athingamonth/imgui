@@ -255,6 +255,10 @@ int main(int argc, char** argv)
     InitGL();
     InitImGui();
 
+	const int bufferSize = 1024;
+	char buffer[bufferSize];
+	memset(buffer, 0, bufferSize);
+
     while (!glfwWindowShouldClose(window))
     {
         ImGuiIO& io = ImGui::GetIO();
@@ -263,8 +267,6 @@ int main(int argc, char** argv)
         UpdateImGui();
 
 		auto showWindow = true;
-		const int bufferSize = 1024;
-		char buffer[bufferSize];
 		ImGui::Begin("Another Window", &showWindow, ImVec2(200, 100));
 		ImGui::InputMultilineText("", 20, buffer, bufferSize);
 		ImGui::End();
