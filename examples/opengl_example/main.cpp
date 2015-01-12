@@ -266,7 +266,7 @@ int main(int argc, char** argv)
 		const int bufferSize = 1024;
 		char buffer[bufferSize];
 		ImGui::Begin("Another Window", &showWindow, ImVec2(200, 100));
-		ImGui::InputText("", buffer, bufferSize);
+		ImGui::InputMultilineText("", buffer, bufferSize);
 		ImGui::End();
 
         // Rendering

@@ -5044,6 +5044,299 @@ bool ImGui::InputText(const char* label, char* buf, size_t buf_size, ImGuiInputT
         return value_changed;
 }
 
+bool ImGui::InputMultilineText(const char* label, char* buf, size_t buf_size, ImGuiInputTextFlags flags, void(*callback)(ImGuiTextEditCallbackData*), void* user_data)
+{
+	ImGuiState& g = GImGui;
+	ImGuiWindow* window = GetCurrentWindow();
+	if (window->SkipItems)
+		return false;
+
+	const ImGuiIO& io = g.IO;
+	const ImGuiStyle& style = g.Style;
+
+	const ImGuiID id = window->GetID(label);
+	const float w = window->DC.ItemWidth.back();
+
+	const ImVec2 text_size = CalcTextSize(label, NULL, true);
+	const ImGuiAabb frame_bb(window->DC.CursorPos, window->DC.CursorPos + ImVec2(w, text_size.y) + style.FramePadding*2.0f);
+	const ImGuiAabb bb(frame_bb.Min, frame_bb.Max + ImVec2(text_size.x > 0.0f ? (style.ItemInnerSpacing.x + text_size.x) : 0.0f, 0.0f));
+	ItemSize(bb);
+
+	if (ClipAdvance(frame_bb))
+		return false;
+
+	// NB: we are only allowed to access 'edit_state' if we are the active widget.
+	ImGuiTextEditState& edit_state = g.InputTextState;
+
+	const bool is_ctrl_down = io.KeyCtrl;
+	const bool is_shift_down = io.KeyShift;
+	const bool tab_focus_requested = window->FocusItemRegister(g.ActiveId == id, (flags & ImGuiInputTextFlags_CallbackCompletion) == 0);    // Using completion callback disable keyboard tabbing
+	//const bool align_center = (bool)(flags & ImGuiInputTextFlags_AlignCenter);    // FIXME: Unsupported
+
+	const bool hovered = IsHovered(frame_bb, id);
+	if (hovered)
+		g.HoveredId = id;
+
+	bool select_all = (g.ActiveId != id) && (flags & ImGuiInputTextFlags_AutoSelectAll) != 0;
+	if (tab_focus_requested || (hovered && io.MouseClicked[0]))
+	{
+		if (g.ActiveId != id)
+		{
+			// Start edition
+			// Take a copy of the initial buffer value (both in original UTF-8 format and converted to wchar)
+			ImFormatString(edit_state.InitialText, IM_ARRAYSIZE(edit_state.InitialText), "%s", buf);
+			ImTextStrFromUtf8(edit_state.Text, IM_ARRAYSIZE(edit_state.Text), buf, NULL);
+			edit_state.ScrollX = 0.0f;
+			edit_state.Width = w;
+			stb_textedit_initialize_state(&edit_state.StbState, true);
+			edit_state.CursorAnimReset();
+			edit_state.LastCursorPos = ImVec2(-1.f, -1.f);
+
+			if (tab_focus_requested || is_ctrl_down)
+				select_all = true;
+		}
+		g.ActiveId = id;
+		FocusWindow(window);
+	}
+	else if (io.MouseClicked[0])
+	{
+		// Release focus when we click outside
+		if (g.ActiveId == id)
+		{
+			g.ActiveId = 0;
+		}
+	}
+
+	bool value_changed = false;
+	bool cancel_edit = false;
+	bool enter_pressed = false;
+	static char text_tmp_utf8[IM_ARRAYSIZE(edit_state.InitialText)];
+	if (g.ActiveId == id)
+	{
+		// Edit in progress
+		edit_state.BufSize = buf_size < IM_ARRAYSIZE(edit_state.Text) ? buf_size : IM_ARRAYSIZE(edit_state.Text);
+		edit_state.Font = window->Font();
+		edit_state.FontSize = window->FontSize();
+
+		const float mx = g.IO.MousePos.x - frame_bb.Min.x - style.FramePadding.x;
+		const float my = window->FontSize()*0.5f;   // Flatten mouse because we are doing a single-line edit
+
+		edit_state.UpdateScrollOffset();
+		if (select_all || (hovered && io.MouseDoubleClicked[0]))
+		{
+			edit_state.SelectAll();
+			edit_state.SelectedAllMouseLock = true;
+		}
+		else if (io.MouseClicked[0] && !edit_state.SelectedAllMouseLock)
+		{
+			stb_textedit_click(&edit_state, &edit_state.StbState, mx + edit_state.ScrollX, my);
+			edit_state.CursorAnimReset();
+
+		}
+		else if (io.MouseDown[0] && !edit_state.SelectedAllMouseLock)
+		{
+			stb_textedit_drag(&edit_state, &edit_state.StbState, mx + edit_state.ScrollX, my);
+			edit_state.CursorAnimReset();
+		}
+		if (edit_state.SelectedAllMouseLock && !io.MouseDown[0])
+			edit_state.SelectedAllMouseLock = false;
+
+		const int k_mask = (is_shift_down ? STB_TEXTEDIT_K_SHIFT : 0);
+		if (IsKeyPressedMap(ImGuiKey_LeftArrow))                { edit_state.OnKeyPressed(is_ctrl_down ? STB_TEXTEDIT_K_WORDLEFT | k_mask : STB_TEXTEDIT_K_LEFT | k_mask); }
+		else if (IsKeyPressedMap(ImGuiKey_RightArrow))          { edit_state.OnKeyPressed(is_ctrl_down ? STB_TEXTEDIT_K_WORDRIGHT | k_mask : STB_TEXTEDIT_K_RIGHT | k_mask); }
+		else if (IsKeyPressedMap(ImGuiKey_Home))                { edit_state.OnKeyPressed(is_ctrl_down ? STB_TEXTEDIT_K_TEXTSTART | k_mask : STB_TEXTEDIT_K_LINESTART | k_mask); }
+		else if (IsKeyPressedMap(ImGuiKey_End))                 { edit_state.OnKeyPressed(is_ctrl_down ? STB_TEXTEDIT_K_TEXTEND | k_mask : STB_TEXTEDIT_K_LINEEND | k_mask); }
+		else if (IsKeyPressedMap(ImGuiKey_Delete))              { edit_state.OnKeyPressed(STB_TEXTEDIT_K_DELETE | k_mask); }
+		else if (IsKeyPressedMap(ImGuiKey_Backspace))           { edit_state.OnKeyPressed(STB_TEXTEDIT_K_BACKSPACE | k_mask); }
+		else if (IsKeyPressedMap(ImGuiKey_Enter))               { g.ActiveId = 0; enter_pressed = true; }
+		else if (IsKeyPressedMap(ImGuiKey_Escape))              { g.ActiveId = 0; cancel_edit = true; }
+		else if (is_ctrl_down && IsKeyPressedMap(ImGuiKey_Z))   { edit_state.OnKeyPressed(STB_TEXTEDIT_K_UNDO); }
+		else if (is_ctrl_down && IsKeyPressedMap(ImGuiKey_Y))   { edit_state.OnKeyPressed(STB_TEXTEDIT_K_REDO); }
+		else if (is_ctrl_down && IsKeyPressedMap(ImGuiKey_A))   { edit_state.SelectAll(); }
+		else if (is_ctrl_down && (IsKeyPressedMap(ImGuiKey_X) || IsKeyPressedMap(ImGuiKey_C)))
+		{
+			// Cut, Copy
+			const bool cut = IsKeyPressedMap(ImGuiKey_X);
+			if (cut && !edit_state.HasSelection())
+				edit_state.SelectAll();
+
+			if (g.IO.SetClipboardTextFn)
+			{
+				const int ib = edit_state.HasSelection() ? ImMin(edit_state.StbState.select_start, edit_state.StbState.select_end) : 0;
+				const int ie = edit_state.HasSelection() ? ImMax(edit_state.StbState.select_start, edit_state.StbState.select_end) : (int)ImStrlenW(edit_state.Text);
+				ImTextStrToUtf8(text_tmp_utf8, IM_ARRAYSIZE(text_tmp_utf8), edit_state.Text + ib, edit_state.Text + ie);
+				g.IO.SetClipboardTextFn(text_tmp_utf8);
+			}
+
+			if (cut)
+				stb_textedit_cut(&edit_state, &edit_state.StbState);
+		}
+		else if (is_ctrl_down && IsKeyPressedMap(ImGuiKey_V))
+		{
+			// Paste
+			if (g.IO.GetClipboardTextFn)
+			{
+				if (const char* clipboard = g.IO.GetClipboardTextFn())
+				{
+					// Remove new-line from pasted buffer
+					size_t clipboard_len = strlen(clipboard);
+					ImWchar* clipboard_filtered = (ImWchar*)ImGui::MemAlloc((clipboard_len + 1) * sizeof(ImWchar));
+					int clipboard_filtered_len = 0;
+					for (const char* s = clipboard; *s;)
+					{
+						unsigned int c;
+						const int bytes_count = ImTextCharFromUtf8(&c, s, NULL);
+						if (bytes_count <= 0)
+							break;
+						s += bytes_count;
+						if (c >= 0x10000)
+							continue;
+						if (InputTextFilterCharacter((ImWchar)c, flags))
+							continue;
+						clipboard_filtered[clipboard_filtered_len++] = (ImWchar)c;
+					}
+					clipboard_filtered[clipboard_filtered_len] = 0;
+					if (clipboard_filtered_len > 0) // If everything was filtered, ignore the pasting operation
+						stb_textedit_paste(&edit_state, &edit_state.StbState, clipboard_filtered, clipboard_filtered_len);
+					ImGui::MemFree(clipboard_filtered);
+				}
+			}
+		}
+		else if (g.IO.InputCharacters[0])
+		{
+			// Text input
+			for (int n = 0; n < IM_ARRAYSIZE(g.IO.InputCharacters) && g.IO.InputCharacters[n]; n++)
+			{
+				const ImWchar c = g.IO.InputCharacters[n];
+				if (c)
+				{
+					// Insert character if they pass filtering
+					if (InputTextFilterCharacter(c, flags))
+						continue;
+					edit_state.OnKeyPressed(c);
+				}
+			}
+
+			// Consume characters
+			memset(g.IO.InputCharacters, 0, sizeof(g.IO.InputCharacters));
+		}
+
+		edit_state.CursorAnim += g.IO.DeltaTime;
+		edit_state.UpdateScrollOffset();
+
+		if (cancel_edit)
+		{
+			// Restore initial value
+			ImFormatString(buf, buf_size, "%s", edit_state.InitialText);
+			value_changed = true;
+		}
+		else
+		{
+			// Apply new value immediately - copy modified buffer back
+			// Note that as soon as we can focus into the input box, the in-widget value gets priority over any underlying modification of the input buffer
+			// FIXME: We actually always render 'buf' in RenderTextScrolledClipped
+			// FIXME-OPT: CPU waste to do this every time the widget is active, should mark dirty state from the stb_textedit callbacks
+			ImTextStrToUtf8(text_tmp_utf8, IM_ARRAYSIZE(text_tmp_utf8), edit_state.Text, NULL);
+
+			// User callback
+			if ((flags & (ImGuiInputTextFlags_CallbackCompletion | ImGuiInputTextFlags_CallbackHistory | ImGuiInputTextFlags_CallbackAlways)) != 0)
+			{
+				IM_ASSERT(callback != NULL);
+
+				// The reason we specify the usage semantic (Completion/History) is that Completion needs to disable keyboard TABBING at the moment.
+				ImGuiKey event_key = ImGuiKey_COUNT;
+				if ((flags & ImGuiInputTextFlags_CallbackCompletion) != 0 && IsKeyPressedMap(ImGuiKey_Tab))
+					event_key = ImGuiKey_Tab;
+				else if ((flags & ImGuiInputTextFlags_CallbackHistory) != 0 && IsKeyPressedMap(ImGuiKey_UpArrow))
+					event_key = ImGuiKey_UpArrow;
+				else if ((flags & ImGuiInputTextFlags_CallbackHistory) != 0 && IsKeyPressedMap(ImGuiKey_DownArrow))
+					event_key = ImGuiKey_DownArrow;
+
+				if (event_key != ImGuiKey_COUNT || (flags & ImGuiInputTextFlags_CallbackAlways) != 0)
+				{
+					ImGuiTextEditCallbackData callback_data;
+					callback_data.EventKey = event_key;
+					callback_data.Buf = text_tmp_utf8;
+					callback_data.BufSize = edit_state.BufSize;
+					callback_data.BufDirty = false;
+					callback_data.Flags = flags;
+					callback_data.UserData = user_data;
+
+					// We have to convert from position from wchar to UTF-8 positions
+					const int utf8_cursor_pos = callback_data.CursorPos = ImTextCountUtf8BytesFromWchar(edit_state.Text, edit_state.Text + edit_state.StbState.cursor);
+					const int utf8_selection_start = callback_data.SelectionStart = ImTextCountUtf8BytesFromWchar(edit_state.Text, edit_state.Text + edit_state.StbState.select_start);
+					const int utf8_selection_end = callback_data.SelectionEnd = ImTextCountUtf8BytesFromWchar(edit_state.Text, edit_state.Text + edit_state.StbState.select_end);
+
+					// Call user code
+					callback(&callback_data);
+
+					// Read back what user may have modified
+					IM_ASSERT(callback_data.Buf == text_tmp_utf8);             // Invalid to modify those fields
+					IM_ASSERT(callback_data.BufSize == edit_state.BufSize);
+					IM_ASSERT(callback_data.Flags == flags);
+					if (callback_data.CursorPos != utf8_cursor_pos)            edit_state.StbState.cursor = ImTextCountCharsFromUtf8(callback_data.Buf, callback_data.Buf + callback_data.CursorPos);
+					if (callback_data.SelectionStart != utf8_selection_start)  edit_state.StbState.select_start = ImTextCountCharsFromUtf8(callback_data.Buf, callback_data.Buf + callback_data.SelectionStart);
+					if (callback_data.SelectionEnd != utf8_selection_end)      edit_state.StbState.select_end = ImTextCountCharsFromUtf8(callback_data.Buf, callback_data.Buf + callback_data.SelectionEnd);
+					if (callback_data.BufDirty)
+					{
+						ImTextStrFromUtf8(edit_state.Text, IM_ARRAYSIZE(edit_state.Text), text_tmp_utf8, NULL);
+						edit_state.CursorAnimReset();
+					}
+				}
+			}
+
+			if (strcmp(text_tmp_utf8, buf) != 0)
+			{
+				ImFormatString(buf, buf_size, "%s", text_tmp_utf8);
+				value_changed = true;
+			}
+		}
+	}
+
+	RenderFrame(frame_bb.Min, frame_bb.Max, window->Color(ImGuiCol_FrameBg), true);
+
+	const ImVec2 font_off_up = ImVec2(0.0f, window->FontSize() + 1.0f);    // FIXME: those offsets are part of the style or font API
+	const ImVec2 font_off_dn = ImVec2(0.0f, 2.0f);
+
+	if (g.ActiveId == id)
+	{
+		// Draw selection
+		const int select_begin_idx = edit_state.StbState.select_start;
+		const int select_end_idx = edit_state.StbState.select_end;
+		if (select_begin_idx != select_end_idx)
+		{
+			const ImVec2 select_begin_pos = frame_bb.Min + style.FramePadding + edit_state.CalcDisplayOffsetFromCharIdx(ImMin(select_begin_idx, select_end_idx));
+			const ImVec2 select_end_pos = frame_bb.Min + style.FramePadding + edit_state.CalcDisplayOffsetFromCharIdx(ImMax(select_begin_idx, select_end_idx));
+			window->DrawList->AddRectFilled(select_begin_pos - font_off_up, select_end_pos + font_off_dn, window->Color(ImGuiCol_TextSelectedBg));
+		}
+	}
+
+	// FIXME: 'align_center' unsupported
+	ImGuiTextEditState::RenderTextScrolledClipped(window->Font(), window->FontSize(), buf, frame_bb.Min + style.FramePadding, w, (g.ActiveId == id) ? edit_state.ScrollX : 0.0f);
+
+	if (g.ActiveId == id)
+	{
+		const ImVec2 cursor_pos = frame_bb.Min + style.FramePadding + edit_state.CalcDisplayOffsetFromCharIdx(edit_state.StbState.cursor);
+
+		// Draw blinking cursor
+		if (g.InputTextState.CursorIsVisible())
+			window->DrawList->AddRect(cursor_pos - font_off_up + ImVec2(0, 2), cursor_pos + font_off_dn - ImVec2(0, 3), window->Color(ImGuiCol_Text));
+
+		// Notify OS of text input position
+		if (io.ImeSetInputScreenPosFn && ImLengthSqr(edit_state.LastCursorPos - cursor_pos) > 0.0001f)
+			io.ImeSetInputScreenPosFn((int)cursor_pos.x - 1, (int)(cursor_pos.y - window->FontSize()));   // -1 x offset so that Windows IME can cover our cursor. Bit of an extra nicety.
+
+		edit_state.LastCursorPos = cursor_pos;
+	}
+
+	RenderText(ImVec2(frame_bb.Max.x + style.ItemInnerSpacing.x, frame_bb.Min.y + style.FramePadding.y), label);
+
+	if ((flags & ImGuiInputTextFlags_EnterReturnsTrue) != 0)
+		return enter_pressed;
+	else
+		return value_changed;
+}
+
 static bool InputFloatN(const char* label, float* v, int components, int decimal_precision)
 {
     ImGuiState& g = GImGui;
